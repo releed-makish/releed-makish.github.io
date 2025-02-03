@@ -6,33 +6,80 @@
     <title>Объявления и водители с 2ГИС</title>
     <script src="https://mapgl.2gis.com/api/js/v1"></script>
     <style>
-        body, html { margin: 0; height: 100%; font-family: Arial, sans-serif; }
-        #container { display: flex; height: 100%; }
-        #sidebar {
-            width: 300px; padding: 20px; background: white;
-            overflow-y: auto; transition: transform 0.3s ease-in-out;
+        html, body {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: #0a192f;
+            color: #333;
+            height: 100%;
         }
-        #map { flex: 1; height: 100%; }
-        input, textarea, button { width: 100%; margin: 5px 0; padding: 10px; }
-        
-        /* Кнопка меню */
+        #container {
+            display: flex;
+            height: 100%;
+        }
+        #sidebar {
+            width: 300px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            transition: transform 0.3s ease-in-out;
+        }
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0033cc;
+        }
         #menu-button {
             display: none;
-            position: absolute; top: 10px; left: 10px;
-            background: #007bff; color: white;
-            border: none; padding: 10px; cursor: pointer;
-            font-size: 18px; border-radius: 5px;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            font-size: 18px;
+            border-radius: 5px;
         }
-
-        /* Адаптивность для мобильных */
         @media (max-width: 768px) {
-            #sidebar {
-                position: fixed; left: -320px; top: 0; width: 300px;
-                height: 100vh; background: white;
-                box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+            #container {
+                flex-direction: column;
             }
-            #menu-button { display: block; }
-            .sidebar-open #sidebar { transform: translateX(320px); }
+            #sidebar {
+                position: fixed;
+                left: -320px;
+                width: 280px;
+                height: 100vh;
+                background: rgba(255, 255, 255, 0.95);
+            }
+            #menu-button {
+                display: block;
+                z-index: 10;
+            }
+            .sidebar-open #sidebar {
+                transform: translateX(0);
+            }
         }
     </style>
 </head>
@@ -65,7 +112,7 @@
     const map = new mapgl.Map('map', {
         center: [77.4400000, 42.1659900],
         zoom: 12,
-        key: 'ТВОЙ_API_КЛЮЧ_2ГИС',
+        key: 'a96cbd91-bcc5-4b23-9a64-37fe49cbe979',
     });
 
     const ads = [];
@@ -75,7 +122,7 @@
         return new Promise((resolve, reject) => {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(position => {
-                    resolve([position.coords.latitude, position.coords.longitude]);
+                    resolve([position.coords.longitude, position.coords.latitude]); // Исправлено!
                 }, reject);
             } else {
                 reject(new Error("Геолокация не поддерживается вашим браузером."));
@@ -85,9 +132,29 @@
 
     function addMarker(coords, iconUrl) {
         new mapgl.Marker(map, {
-            coordinates: [coords[1], coords[0]],
+            coordinates: coords,
             icon: iconUrl,
             scale: 1
+        });
+    }
+
+    function updateAdList() {
+        const cargoList = document.getElementById('cargo-list');
+        cargoList.innerHTML = '';
+        ads.forEach(ad => {
+            const li = document.createElement('li');
+            li.textContent = `${ad.title}: ${ad.description} (${ad.location[1]}, ${ad.location[0]})`;
+            cargoList.appendChild(li);
+        });
+    }
+
+    function updateDriverList() {
+        const driversList = document.getElementById('driversList');
+        driversList.innerHTML = '';
+        drivers.forEach(driver => {
+            const li = document.createElement('li');
+            li.textContent = `${driver.name} - ${driver.phone}`;
+            driversList.appendChild(li);
         });
     }
 
@@ -105,7 +172,6 @@
             ads.push(newAd);
             updateAdList();
             addMarker(location, 'https://img.icons8.com/ios/50/warehouse.png');
-            clearAdForm();
         }).catch(error => {
             alert('Ошибка определения местоположения: ' + error.message);
         });
@@ -116,50 +182,21 @@
         const driverPhone = document.getElementById('driverPhone').value;
 
         if (!driverName || !driverPhone) {
-            alert("Пожалуйста, заполните все поля для регистрации водителя.");
+            alert("Заполните все поля.");
             return;
         }
 
         const driverCoordinates = [
-            42.1659900 + (Math.random() - 0.5) * 0.05,
-            77.4400000 + (Math.random() - 0.5) * 0.05
+            77.4400000 + (Math.random() - 0.5) * 0.05,
+            42.1659900 + (Math.random() - 0.5) * 0.05
         ];
 
         drivers.push({ name: driverName, phone: driverPhone, coordinates: driverCoordinates });
-
-        document.getElementById('driverName').value = '';
-        document.getElementById('driverPhone').value = '';
 
         updateDriverList();
         addMarker(driverCoordinates, 'https://img.icons8.com/ios/50/car.png');
     };
 
-    function updateAdList() {
-        const cargoList = document.getElementById('cargo-list');
-        cargoList.innerHTML = '';
-        ads.forEach(ad => {
-            const li = document.createElement('li');
-            li.textContent = `${ad.title}: ${ad.description} (${ad.location[0]}, ${ad.location[1]})`;
-            cargoList.appendChild(li);
-        });
-    }
-
-    function updateDriverList() {
-        const driversList = document.getElementById('driversList');
-        driversList.innerHTML = '';
-        drivers.forEach(driver => {
-            const li = document.createElement('li');
-            li.textContent = `${driver.name} - ${driver.phone}`;
-            driversList.appendChild(li);
-        });
-    }
-
-    function clearAdForm() {
-        document.getElementById('title').value = '';
-        document.getElementById('description').value = '';
-    }
-
-    // Открытие / закрытие меню на мобильных устройствах
     document.getElementById('menu-button').addEventListener('click', function() {
         document.getElementById('container').classList.toggle('sidebar-open');
     });
