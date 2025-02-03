@@ -3,125 +3,169 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fast Help - Объявления</title>
-    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.0.0/firebase-database.js"></script>
+    <title>Объявления и водители с 2ГИС</title>
+    <script src="https://mapgl.2gis.com/api/js/v1"></script>
     <style>
-        html, body {
-            margin: 0;
-            font-family: 'Inter', sans-serif;
-            background-color: #0a192f;
-            color: #333;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+        body, html { margin: 0; height: 100%; font-family: Arial, sans-serif; }
+        #container { display: flex; height: 100%; }
+        #sidebar {
+            width: 300px; padding: 20px; background: white;
+            overflow-y: auto; transition: transform 0.3s ease-in-out;
         }
-        #container {
-            width: 90%;
-            max-width: 400px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            text-align: center;
+        #map { flex: 1; height: 100%; }
+        input, textarea, button { width: 100%; margin: 5px 0; padding: 10px; }
+        
+        /* Кнопка меню */
+        #menu-button {
+            display: none;
+            position: absolute; top: 10px; left: 10px;
+            background: #007bff; color: white;
+            border: none; padding: 10px; cursor: pointer;
+            font-size: 18px; border-radius: 5px;
         }
-        input, textarea {
-            width: 100%;
-            padding: 10px;
-            margin: 5px 0;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #0033cc;
-        }
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-        li {
-            background: #e9ecef;
-            margin: 5px 0;
-            padding: 10px;
-            border-radius: 4px;
+
+        /* Адаптивность для мобильных */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed; left: -320px; top: 0; width: 300px;
+                height: 100vh; background: white;
+                box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+            }
+            #menu-button { display: block; }
+            .sidebar-open #sidebar { transform: translateX(320px); }
         }
     </style>
 </head>
 <body>
-    <div id="container">
+
+<button id="menu-button">☰</button>
+
+<div id="container" class="sidebar-open">
+    <div id="sidebar">
         <h2>Добавить объявление</h2>
-        <input type="text" id="title" placeholder="Заголовок">
-        <textarea id="description" placeholder="Описание"></textarea>
-        <button id="addAdButton">Добавить</button>
+        <input type="text" id="title" placeholder="Название груза" required />
+        <textarea id="description" rows="4" placeholder="Описание" required></textarea>
+        <button id="addAdButton">Добавить объявление</button>
+
+        <h2>Регистрация водителя</h2>
+        <input type="text" id="driverName" placeholder="Имя водителя" required />
+        <input type="text" id="driverPhone" placeholder="Номер телефона" required />
+        <button id="registerDriverButton">Зарегистрировать водителя</button>
+
         <h2>Объявления</h2>
         <ul id="cargo-list"></ul>
+
+        <h2>Водители</h2>
+        <ul id="driversList"></ul>
     </div>
+    <div id="map"></div>
+</div>
 
-    <script>
-        // Инициализация Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyAHxU3q5xEwC9nq2zZ2G0UGdxCtpyAW8KU",
-            authDomain: "fast-help-817b7.firebaseapp.com",
-            databaseURL: "https://fast-help-817b7-default-rtdb.firebaseio.com",
-            projectId: "fast-help-817b7",
-            storageBucket: "fast-help-817b7.appspot.com",
-            messagingSenderId: "798375078862",
-            appId: "1:798375078862:web:your-app-id"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+<script>
+    const map = new mapgl.Map('map', {
+        center: [77.4400000, 42.1659900],
+        zoom: 12,
+        key: 'ТВОЙ_API_КЛЮЧ_2ГИС',
+    });
 
-        let ads = [];
+    const ads = [];
+    const drivers = [];
 
-        function saveAdToFirebase(ad) {
-            db.ref("ads").push(ad);
-        }
-
-        function updateAdList() {
-            const cargoListElement = document.getElementById('cargo-list');
-            cargoListElement.innerHTML = '';
-            ads.forEach(ad => {
-                const listItem = document.createElement('li');
-                listItem.textContent = `${ad.title}: ${ad.description}`;
-                cargoListElement.appendChild(listItem);
-            });
-        }
-
-        db.ref("ads").on("value", (snapshot) => {
-            ads.length = 0;
-            snapshot.forEach(childSnapshot => {
-                ads.push(childSnapshot.val());
-            });
-            updateAdList();
-        });
-
-        document.getElementById('addAdButton').onclick = function () {
-            const title = document.getElementById('title').value;
-            const description = document.getElementById('description').value;
-
-            if (!title || !description) {
-                alert("Заполните все поля.");
-                return;
+    function getCurrentLocation() {
+        return new Promise((resolve, reject) => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    resolve([position.coords.latitude, position.coords.longitude]);
+                }, reject);
+            } else {
+                reject(new Error("Геолокация не поддерживается вашим браузером."));
             }
+        });
+    }
 
-            const newAd = { title, description };
-            saveAdToFirebase(newAd);
-            document.getElementById('title').value = '';
-            document.getElementById('description').value = '';
-        };
-    </script>
+    function addMarker(coords, iconUrl) {
+        new mapgl.Marker(map, {
+            coordinates: [coords[1], coords[0]],
+            icon: iconUrl,
+            scale: 1
+        });
+    }
+
+    document.getElementById('addAdButton').onclick = function () {
+        const title = document.getElementById('title').value;
+        const description = document.getElementById('description').value;
+
+        if (!title || !description) {
+            alert("Заполните все поля!");
+            return;
+        }
+
+        getCurrentLocation().then(location => {
+            const newAd = { title, description, location };
+            ads.push(newAd);
+            updateAdList();
+            addMarker(location, 'https://img.icons8.com/ios/50/warehouse.png');
+            clearAdForm();
+        }).catch(error => {
+            alert('Ошибка определения местоположения: ' + error.message);
+        });
+    };
+
+    document.getElementById('registerDriverButton').onclick = function () {
+        const driverName = document.getElementById('driverName').value;
+        const driverPhone = document.getElementById('driverPhone').value;
+
+        if (!driverName || !driverPhone) {
+            alert("Пожалуйста, заполните все поля для регистрации водителя.");
+            return;
+        }
+
+        const driverCoordinates = [
+            42.1659900 + (Math.random() - 0.5) * 0.05,
+            77.4400000 + (Math.random() - 0.5) * 0.05
+        ];
+
+        drivers.push({ name: driverName, phone: driverPhone, coordinates: driverCoordinates });
+
+        document.getElementById('driverName').value = '';
+        document.getElementById('driverPhone').value = '';
+
+        updateDriverList();
+        addMarker(driverCoordinates, 'https://img.icons8.com/ios/50/car.png');
+    };
+
+    function updateAdList() {
+        const cargoList = document.getElementById('cargo-list');
+        cargoList.innerHTML = '';
+        ads.forEach(ad => {
+            const li = document.createElement('li');
+            li.textContent = `${ad.title}: ${ad.description} (${ad.location[0]}, ${ad.location[1]})`;
+            cargoList.appendChild(li);
+        });
+    }
+
+    function updateDriverList() {
+        const driversList = document.getElementById('driversList');
+        driversList.innerHTML = '';
+        drivers.forEach(driver => {
+            const li = document.createElement('li');
+            li.textContent = `${driver.name} - ${driver.phone}`;
+            driversList.appendChild(li);
+        });
+    }
+
+    function clearAdForm() {
+        document.getElementById('title').value = '';
+        document.getElementById('description').value = '';
+    }
+
+    // Открытие / закрытие меню на мобильных устройствах
+    document.getElementById('menu-button').addEventListener('click', function() {
+        document.getElementById('container').classList.toggle('sidebar-open');
+    });
+</script>
+
 </body>
 </html>
+
 
