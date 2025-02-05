@@ -1,22 +1,26 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Объявления и водители с 2ГИС</title>
-    <script src="https://mapgl.2gis.com/api/js/v1"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Сайт Объявлений с Карты 2ГИС</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <style>
         html, body {
             margin: 0;
             font-family: 'Inter', sans-serif;
             background-color: #0a192f;
             color: #333;
+            overflow: hidden;
             height: 100%;
         }
+
         #container {
             display: flex;
             height: 100%;
+            transition: transform 0.3s ease; /* Плавный переход для открытия/закрытия */
         }
+
         #sidebar {
             width: 300px;
             background: rgba(255, 255, 255, 0.9);
@@ -24,19 +28,26 @@
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             overflow-y: auto;
-            transition: transform 0.3s ease-in-out;
+            position: relative;
+            transform: translateX(-100%); /* Скрыто по умолчанию */
+            transition: transform 0.3s ease; /* Плавный переход для боковой панели */
         }
+
         #map {
             flex: 1;
             height: 100%;
+            border-radius: 0 8px 8px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
+
         input, textarea {
-            width: 100%;
+            width: calc(100% - 30px);
             padding: 10px;
             margin: 5px 0;
             border: 1px solid #ccc;
             border-radius: 4px;
         }
+
         button {
             padding: 10px 20px;
             background-color: #007bff;
@@ -46,39 +57,49 @@
             cursor: pointer;
             transition: background-color 0.3s;
         }
+
         button:hover {
             background-color: #0033cc;
         }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        li {
+            background: #e9ecef;
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
         #menu-button {
-            display: none;
             position: absolute;
+            z-index: 10;
             top: 10px;
             left: 10px;
-            background: #007bff;
+            padding: 10px;
+            background-color: #007bff;
             color: white;
             border: none;
-            padding: 10px;
             cursor: pointer;
-            font-size: 18px;
             border-radius: 5px;
         }
+
+        /* Показать боковую панель при включенном классе */
+        #container.menu-open #sidebar {
+            transform: translateX(0); /* Показываем меню */
+        }
+
         @media (max-width: 768px) {
-            #container {
-                flex-direction: column;
-            }
             #sidebar {
-                position: fixed;
-                left: -320px;
-                width: 280px;
-                height: 100vh;
-                background: rgba(255, 255, 255, 0.95);
-            }
-            #menu-button {
-                display: block;
-                z-index: 10;
-            }
-            .sidebar-open #sidebar {
-                transform: translateX(0);
+                width: 250px;
+                height: 100vh; /* Высота для мобильных устройств */
             }
         }
     </style>
@@ -87,74 +108,64 @@
 
 <button id="menu-button">☰</button>
 
-<div id="container" class="sidebar-open">
+<div id="container">
     <div id="sidebar">
-        <h2>Добавить объявление</h2>
+      <p id="nonTranslatable">Fast Help</p>
+        <h2>Добавить Обьявление</h2>
         <input type="text" id="title" placeholder="Название груза" required />
-        <textarea id="description" rows="4" placeholder="Описание" required></textarea>
+        <textarea id="description" rows="4" placeholder="Адрес,Имя,Номер" required></textarea>
         <button id="addAdButton">Добавить объявление</button>
 
         <h2>Регистрация водителя</h2>
         <input type="text" id="driverName" placeholder="Имя водителя" required />
         <input type="text" id="driverPhone" placeholder="Номер телефона" required />
         <button id="registerDriverButton">Зарегистрировать водителя</button>
-
+        
         <h2>Объявления</h2>
         <ul id="cargo-list"></ul>
 
         <h2>Водители</h2>
         <ul id="driversList"></ul>
     </div>
+
     <div id="map"></div>
 </div>
 
+<script src="https://mapgl.2gis.com/api/js/v1"></script>
 <script>
     const map = new mapgl.Map('map', {
         center: [77.4400000, 42.1659900],
         zoom: 12,
-        key: 'a96cbd91-bcc5-4b23-9a64-37fe49cbe979',
+        key: 'a96cbd91-bcc5-4b23-9a64-37fe49cbe979', // Замените на ваш API ключ 2ГИС
     });
 
-    const ads = [];
-    const drivers = [];
+    const drivers = []; // Массив для хранения зарегистрированных водителей
+    const ads = []; // Массив для хранения объявлений
 
-    function getCurrentLocation() {
-        return new Promise((resolve, reject) => {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(position => {
-                    resolve([position.coords.longitude, position.coords.latitude]); // Исправлено!
-                }, reject);
-            } else {
-                reject(new Error("Геолокация не поддерживается вашим браузером."));
-            }
-        });
-    }
+    function displayAds() {
+        document.getElementById('cargo-list').innerHTML = ''; // Очистить список объявлений
 
-    function addMarker(coords, iconUrl) {
-        new mapgl.Marker(map, {
-            coordinates: coords,
-            icon: iconUrl,
-            scale: 1
-        });
-    }
-
-    function updateAdList() {
-        const cargoList = document.getElementById('cargo-list');
-        cargoList.innerHTML = '';
         ads.forEach(ad => {
-            const li = document.createElement('li');
-            li.textContent = `${ad.title}: ${ad.description} (${ad.location[1]}, ${ad.location[0]})`;
-            cargoList.appendChild(li);
+            const listItem = document.createElement('li');
+            listItem.textContent = `${ad.title}: ${ad.description}`;
+            document.getElementById('cargo-list').appendChild(listItem);
         });
     }
 
-    function updateDriverList() {
-        const driversList = document.getElementById('driversList');
-        driversList.innerHTML = '';
+    function displayDrivers() {
+        document.getElementById('driversList').innerHTML = ''; // Очистить список водителей
+
         drivers.forEach(driver => {
-            const li = document.createElement('li');
-            li.textContent = `${driver.name} - ${driver.phone}`;
-            driversList.appendChild(li);
+            const driverListItem = document.createElement('li');
+            driverListItem.textContent = `${driver.name} - ${driver.phone}`; // Имя и номер телефона водителя
+            document.getElementById('driversList').appendChild(driverListItem);
+
+            // Добавление маркера на карту
+            new mapgl.Marker(map, {
+                coordinates: driver.coordinates,
+                icon: 'https://img.icons8.com/ios/50/car.png',
+                scale: 1
+            });
         });
     }
 
@@ -163,18 +174,42 @@
         const description = document.getElementById('description').value;
 
         if (!title || !description) {
-            alert("Заполните все поля!");
+            alert("Пожалуйста, заполните название и описание объявления.");
             return;
         }
 
-        getCurrentLocation().then(location => {
-            const newAd = { title, description, location };
-            ads.push(newAd);
-            updateAdList();
-            addMarker(location, 'https://img.icons8.com/ios/50/warehouse.png');
-        }).catch(error => {
-            alert('Ошибка определения местоположения: ' + error.message);
-        });
+        // Получаем текущее местоположение
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                const location = [position.coords.longitude, position.coords.latitude]; // [долгота, широта]
+
+                const newAd = {
+                    title: title,
+                    description: description,
+                    location: location // Сохраняем как массив
+                };
+
+                ads.push(newAd);
+                displayAds();
+
+                // Создаем маркер для нового объявления
+                new mapgl.Marker(map, {
+                    coordinates: location,
+                    icon: 'https://img.icons8.com/ios/50/warehouse.png',
+                    scale: 1
+                });
+
+                map.setCenter(location); // Центрируем карту на маркере
+
+                // Очищаем поля ввода
+                document.getElementById('title').value = '';
+                document.getElementById('description').value = '';
+            }, () => {
+                alert('Ошибка получения местоположения.');
+            });
+        } else {
+            alert("Геолокация не поддерживается вашим браузером.");
+        }
     };
 
     document.getElementById('registerDriverButton').onclick = function () {
@@ -182,27 +217,49 @@
         const driverPhone = document.getElementById('driverPhone').value;
 
         if (!driverName || !driverPhone) {
-            alert("Заполните все поля.");
+            alert("Пожалуйста, заполните все поля для регистрации водителя.");
             return;
         }
 
-        const driverCoordinates = [
-            77.4400000 + (Math.random() - 0.5) * 0.05,
-            42.1659900 + (Math.random() - 0.5) * 0.05
-        ];
+        // Получаем текущее местоположение
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                // Генерация координат на основе местоположения водителя
+                const driverCoordinates = [position.coords.longitude, position.coords.latitude]; // [долгота, широта]
 
-        drivers.push({ name: driverName, phone: driverPhone, coordinates: driverCoordinates });
+                drivers.push({
+                    name: driverName,
+                    phone: driverPhone,
+                    coordinates: driverCoordinates
+                });
 
-        updateDriverList();
-        addMarker(driverCoordinates, 'https://img.icons8.com/ios/50/car.png');
+                displayDrivers(); // Обновляем отображение водителей
+
+                // Добавление маркера на карту для водителя
+                new mapgl.Marker(map, {
+                    coordinates: driverCoordinates,
+                    icon: 'https://img.icons8.com/ios/50/car.png',
+                    scale: 1
+                });
+
+                // Очищаем поля ввода для регистрации
+                document.getElementById('driverName').value = '';
+                document.getElementById('driverPhone').value = '';
+            }, () => {
+                alert('Ошибка получения местоположения.');
+            });
+        } else {
+            alert("Геолокация не поддерживается вашим браузером.");
+        }
     };
 
-    document.getElementById('menu-button').addEventListener('click', function() {
-        document.getElementById('container').classList.toggle('sidebar-open');
-    });
+    // Обработчик клика по кнопке меню
+    document.getElementById('menu-button').onclick = function() {
+        document.getElementById('container').classList.toggle('menu-open');
+        document.getElementById('sidebar').style.transform = 
+            document.getElementById('container').classList.contains('menu-open') ? 'translateX(0)' : 'translateX(-100%)';
+    };
 </script>
 
 </body>
 </html>
-
-
